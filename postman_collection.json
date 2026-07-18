@@ -1,0 +1,291 @@
+{
+  "info": {
+    "name": "WebBackend - AI驱动高并发秒杀智能电商",
+    "description": "期末大作业题目一 API测试集合",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:8000"
+    },
+    {
+      "key": "admin_token",
+      "value": ""
+    },
+    {
+      "key": "user_token",
+      "value": ""
+    },
+    {
+      "key": "product_id",
+      "value": ""
+    }
+  ],
+  "item": [
+    {
+      "name": "1. 基础设施检查",
+      "item": [
+        {
+          "name": "网关健康检查",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/health"
+          }
+        },
+        {
+          "name": "商品列表（公开）",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/products?page=1&size=10"
+          }
+        }
+      ]
+    },
+    {
+      "name": "2. 用户认证",
+      "item": [
+        {
+          "name": "注册管理员",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/register",
+            "header": [
+              {"key": "Content-Type", "value": "application/json"}
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"username\": \"admin\", \"password\": \"admin123\"}"
+            }
+          }
+        },
+        {
+          "name": "注册普通用户",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/register",
+            "header": [
+              {"key": "Content-Type", "value": "application/json"}
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"username\": \"testuser\", \"password\": \"test123\"}"
+            }
+          }
+        },
+        {
+          "name": "管理员登录",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "var data = JSON.parse(responseBody);",
+                  "pm.collectionVariables.set('admin_token', data.data.token);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/login",
+            "header": [
+              {"key": "Content-Type", "value": "application/json"}
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"username\": \"admin\", \"password\": \"admin123\"}"
+            }
+          }
+        },
+        {
+          "name": "普通用户登录",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "var data = JSON.parse(responseBody);",
+                  "pm.collectionVariables.set('user_token', data.data.token);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/login",
+            "header": [
+              {"key": "Content-Type", "value": "application/json"}
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"username\": \"testuser\", \"password\": \"test123\"}"
+            }
+          }
+        },
+        {
+          "name": "获取当前用户信息",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/me",
+            "header": [
+              {"key": "Authorization", "value": "Bearer {{user_token}}"}
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "3. 商品管理",
+      "item": [
+        {
+          "name": "添加商品（管理员）",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "var data = JSON.parse(responseBody);",
+                  "if (data.code === 200) {",
+                  "  pm.collectionVariables.set('product_id', data.data.id);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/products",
+            "header": [
+              {"key": "Content-Type", "value": "application/json"},
+              {"key": "Authorization", "value": "Bearer {{admin_token}}"}
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"name\": \"iPhone 15 Pro Max\", \"description\": \"Apple最新旗舰手机，A17 Pro芯片，钛金属设计，4800万像素主摄\", \"price\": 9999.00, \"stock\": 100}"
+            }
+          }
+        },
+        {
+          "name": "添加秒杀商品（管理员）",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "var data = JSON.parse(responseBody);",
+                  "if (data.code === 200) {",
+                  "  pm.collectionVariables.set('product_id', data.data.id);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/products",
+            "header": [
+              {"key": "Content-Type", "value": "application/json"},
+              {"key": "Authorization", "value": "Bearer {{admin_token}}"}
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"name\": \"【秒杀】AirPods Pro 3\", \"description\": \"Apple主动降噪耳机，H2芯片，自适应音频\", \"price\": 1899.00, \"stock\": 100}"
+            }
+          }
+        },
+        {
+          "name": "商品列表查询",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/products?page=1&size=10"
+          }
+        },
+        {
+          "name": "商品详情",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/products/{{product_id}}"
+          }
+        }
+      ]
+    },
+    {
+      "name": "4. 秒杀流程（核心）",
+      "item": [
+        {
+          "name": "开启秒杀活动（管理员）",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/seckill/start",
+            "header": [
+              {"key": "Content-Type", "value": "application/json"},
+              {"key": "Authorization", "value": "Bearer {{admin_token}}"}
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"product_id\": \"{{product_id}}\", \"stock\": 100, \"seckill_price\": 999.00}"
+            }
+          }
+        },
+        {
+          "name": "查询秒杀库存",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/seckill/stock/{{product_id}}"
+          }
+        },
+        {
+          "name": "提交秒杀请求（用户）",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/seckill/submit",
+            "header": [
+              {"key": "Content-Type", "value": "application/json"},
+              {"key": "Authorization", "value": "Bearer {{user_token}}"}
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"product_id\": \"{{product_id}}\"}"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "5. 订单查询",
+      "item": [
+        {
+          "name": "查询个人订单列表",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/orders?page=1&size=10",
+            "header": [
+              {"key": "Authorization", "value": "Bearer {{user_token}}"}
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "6. AI智能导购",
+      "item": [
+        {
+          "name": "AI商品咨询",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/ai/consult",
+            "header": [
+              {"key": "Content-Type", "value": "application/json"},
+              {"key": "Authorization", "value": "Bearer {{user_token}}"}
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"product_id\": \"{{product_id}}\", \"question\": \"这款商品性价比怎么样？适合什么人群购买？\"}"
+            }
+          }
+        }
+      ]
+    }
+  ]
+}
