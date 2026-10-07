@@ -11,9 +11,8 @@ if not LIVE:
 import pytest_asyncio
 import fakeredis.aioredis
 from common.database import Base, engine, async_session_factory
-import common.models
 from common.models import User, UserRole
-from common.auth import hash_password, create_access_token
+from common.auth import create_access_token
 
 
 @pytest_asyncio.fixture(autouse=True)
@@ -49,3 +48,10 @@ async def tokens():
         await db.commit()
     return {role: create_access_token({'sub': str(uid), 'role': 'admin' if role == 'admin' else 'customer', 'username': role})
             for role, uid in [('admin', 1), ('customer', 2), ('other', 3)]}
+
+
+@pytest_asyncio.fixture
+async def api():
+    import httpx
+    async with httpx.AsyncClient(base_url=os.getenv('LIVE_BASE_URL', 'http://localhost:8000'), timeout=10) as client:
+        yield client

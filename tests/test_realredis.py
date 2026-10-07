@@ -1,8 +1,6 @@
 import os
 import time
 import uuid
-from types import SimpleNamespace
-from decimal import Decimal
 import asyncio
 import pytest
 from redis.asyncio import Redis

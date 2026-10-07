@@ -2,6 +2,7 @@
 import asyncio
 from sqlalchemy import inspect, text, select
 from sqlalchemy.sql.sqltypes import Float
+from sqlalchemy.exc import OperationalError
 from common.database import engine, create_schema, async_session_factory
 from common.models import User, UserRole
 from common.auth import hash_password
@@ -10,6 +11,16 @@ from common.validation import check_password
 
 
 async def initialize():
+    # Retry only initial connectivity; do not blindly retry a partly applied migration.
+    for attempt in range(30):
+        try:
+            async with engine.connect() as probe:
+                await probe.execute(text('SELECT 1'))
+            break
+        except OperationalError:
+            if attempt == 29:
+                raise
+            await asyncio.sleep(2)
     # MySQL advisory lock serializes simultaneous deployments; runtime services wait on this job.
     async with engine.connect() as lock:
         mysql = engine.dialect.name == 'mysql'

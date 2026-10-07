@@ -3,7 +3,7 @@ import json
 import os
 import pytest
 from common.redis_client import redis_client
-from tests.test_live import api, admin_token, customer, setup_activity, await_order, auth
+from tests.test_live import admin_token, customer, setup_activity, await_order, auth
 
 pytestmark = [pytest.mark.live, pytest.mark.skipif(os.getenv('RUN_LIVE_TESTS') != '1' or not os.getenv('BROKER_FAULT_STAGE'), reason='fault injection not requested')]
 

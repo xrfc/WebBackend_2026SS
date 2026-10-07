@@ -7,7 +7,7 @@ from common.lifecycle import lifespan, check_dependencies
 from common.database import get_db
 from common.models import Product, ProductStatus, SeckillActivity
 from common.auth import require_role
-from common.validation import ID, Stock, Money
+from common.validation import Stock, Money
 from common.response import ApiResponse
 
 app = create_app('Product Service', lifespan=lifespan)

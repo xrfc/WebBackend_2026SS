@@ -6,13 +6,11 @@ from unittest.mock import AsyncMock
 import httpx
 import pytest
 from fastapi import HTTPException
-from fastapi.testclient import TestClient
-from starlette.websockets import WebSocketDisconnect
 from sqlalchemy import select, func
 from common.database import async_session_factory
-from common.models import Product, User, UserRole, Order
-from common.auth import create_access_token, authenticate_token, decode_token
-from common.seckill_store import activity_key, request_key, OUTBOX, OUTBOX_GROUP, reserve, read_request
+from common.models import Product, Order
+from common.auth import authenticate_token
+from common.seckill_store import activity_key, OUTBOX, reserve, read_request
 from common.events import OrderEvent
 from services.product_service import main as product
 from services.seckill_service import main as seckill

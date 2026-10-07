@@ -16,7 +16,7 @@ url = settings.DATABASE_URL or URL.create(
 )
 options = {'pool_pre_ping': True}
 if not str(url).startswith('sqlite'):
-    options.update(pool_size=10, max_overflow=5, pool_recycle=1800)
+    options.update(pool_size=10, max_overflow=5, pool_recycle=1800, connect_args={'connect_timeout': 3})
 engine = create_async_engine(url, **options)
 async_session_factory = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
 
@@ -33,6 +33,6 @@ async def init_db():
 
 
 async def create_schema():
-    import common.models  # register every table in one place
+    import common.models  # noqa: F401 - register every table in one place
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)

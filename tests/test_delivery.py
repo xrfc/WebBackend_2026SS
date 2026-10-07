@@ -4,7 +4,6 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock
 import pytest
 from sqlalchemy.exc import OperationalError
-from common.events import OrderEvent
 from common.mq import DEAD_QUEUE, RETRY_QUEUE
 from common.seckill_store import OUTBOX, OUTBOX_GROUP, reserve, read_request
 from services.order_service import main as order

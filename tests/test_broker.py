@@ -1,12 +1,11 @@
 import asyncio
-import json
 import os
 import uuid
 import pytest
 from common.mq import connect_mq, persistent_message, DEAD_QUEUE
 from common.redis_client import redis_client
 from common.seckill_store import request_key
-from tests.test_live import api, admin_token, customer, setup_activity, await_order, auth
+from tests.test_live import admin_token, customer, setup_activity, await_order, auth
 
 pytestmark = [pytest.mark.live, pytest.mark.skipif(os.getenv('RUN_LIVE_TESTS') != '1', reason='real broker not configured')]
 

@@ -3,9 +3,7 @@ import asyncio
 import os
 import uuid
 from urllib.parse import urlsplit
-import httpx
 import pytest
-import pytest_asyncio
 import websockets
 
 pytestmark = [pytest.mark.live, pytest.mark.skipif(os.getenv('RUN_LIVE_TESTS') != '1', reason='real stack not configured')]
@@ -16,10 +14,6 @@ def auth(token):
     return {'Authorization': 'Bearer ' + token}
 
 
-@pytest_asyncio.fixture
-async def api():
-    async with httpx.AsyncClient(base_url=BASE_URL, timeout=10) as client:
-        yield client
 
 
 async def admin_token(api):
@@ -64,6 +58,8 @@ async def await_order(api, token, request_id, timeout=60):
 
 async def test_real_end_to_end_stock_orders_and_websocket(api):
     assert (await api.get('/ready')).status_code == 200
+    schema = (await api.get('/openapi.json')).json()
+    assert {'/login', '/seckill/start', '/seckill/submit', '/orders', '/ai/consult'} <= schema['paths'].keys()
     admin = await admin_token(api)
     people = [await customer(api) for _ in range(8)]
     pid, aid = await setup_activity(api, admin)
