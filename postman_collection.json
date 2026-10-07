@@ -1,7 +1,7 @@
 {
   "info": {
     "name": "WebBackend - AI驱动高并发秒杀智能电商",
-    "description": "期末大作业题目一 API测试集合",
+    "description": "完整容器服务验收；管理员密码从本机.env填入集合变量admin_password。",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
@@ -19,6 +19,22 @@
     },
     {
       "key": "product_id",
+      "value": ""
+    },
+    {
+      "key": "admin_password",
+      "value": ""
+    },
+    {
+      "key": "customer_password",
+      "value": "test-password-123"
+    },
+    {
+      "key": "activity_id",
+      "value": ""
+    },
+    {
+      "key": "request_id",
       "value": ""
     }
   ],
@@ -46,30 +62,19 @@
       "name": "2. 用户认证",
       "item": [
         {
-          "name": "注册管理员",
-          "request": {
-            "method": "POST",
-            "url": "{{base_url}}/register",
-            "header": [
-              {"key": "Content-Type", "value": "application/json"}
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\"username\": \"admin\", \"password\": \"admin123\"}"
-            }
-          }
-        },
-        {
           "name": "注册普通用户",
           "request": {
             "method": "POST",
             "url": "{{base_url}}/register",
             "header": [
-              {"key": "Content-Type", "value": "application/json"}
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\"username\": \"testuser\", \"password\": \"test123\"}"
+              "raw": "{\"username\": \"testuser\", \"password\": \"{{customer_password}}\"}"
             }
           }
         },
@@ -90,11 +95,14 @@
             "method": "POST",
             "url": "{{base_url}}/login",
             "header": [
-              {"key": "Content-Type", "value": "application/json"}
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\"username\": \"admin\", \"password\": \"admin123\"}"
+              "raw": "{\"username\": \"admin\", \"password\": \"{{admin_password}}\"}"
             }
           }
         },
@@ -115,11 +123,14 @@
             "method": "POST",
             "url": "{{base_url}}/login",
             "header": [
-              {"key": "Content-Type", "value": "application/json"}
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\"username\": \"testuser\", \"password\": \"test123\"}"
+              "raw": "{\"username\": \"testuser\", \"password\": \"{{customer_password}}\"}"
             }
           }
         },
@@ -129,7 +140,10 @@
             "method": "GET",
             "url": "{{base_url}}/me",
             "header": [
-              {"key": "Authorization", "value": "Bearer {{user_token}}"}
+              {
+                "key": "Authorization",
+                "value": "Bearer {{user_token}}"
+              }
             ]
           }
         }
@@ -157,8 +171,14 @@
             "method": "POST",
             "url": "{{base_url}}/products",
             "header": [
-              {"key": "Content-Type", "value": "application/json"},
-              {"key": "Authorization", "value": "Bearer {{admin_token}}"}
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
             ],
             "body": {
               "mode": "raw",
@@ -185,8 +205,14 @@
             "method": "POST",
             "url": "{{base_url}}/products",
             "header": [
-              {"key": "Content-Type", "value": "application/json"},
-              {"key": "Authorization", "value": "Bearer {{admin_token}}"}
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
             ],
             "body": {
               "mode": "raw",
@@ -219,14 +245,31 @@
             "method": "POST",
             "url": "{{base_url}}/seckill/start",
             "header": [
-              {"key": "Content-Type", "value": "application/json"},
-              {"key": "Authorization", "value": "Bearer {{admin_token}}"}
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\"product_id\": \"{{product_id}}\", \"stock\": 100, \"seckill_price\": 999.00}"
+              "raw": "{\"product_id\": {{product_id}}, \"stock\": 100, \"seckill_price\": 999.00}"
             }
-          }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const j=pm.response.json(); if(j.data && j.data.activity_id) pm.collectionVariables.set(\"activity_id\", j.data.activity_id);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
         },
         {
           "name": "查询秒杀库存",
@@ -241,13 +284,43 @@
             "method": "POST",
             "url": "{{base_url}}/seckill/submit",
             "header": [
-              {"key": "Content-Type", "value": "application/json"},
-              {"key": "Authorization", "value": "Bearer {{user_token}}"}
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{user_token}}"
+              }
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\"product_id\": \"{{product_id}}\"}"
+              "raw": "{\"product_id\": {{product_id}}, \"activity_id\": \"{{activity_id}}\"}"
             }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const j=pm.response.json(); if(j.data && j.data.request_id) pm.collectionVariables.set(\"request_id\", j.data.request_id);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "查询抢购处理结果",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/seckill/requests/{{request_id}}",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{user_token}}"
+              }
+            ]
           }
         }
       ]
@@ -261,7 +334,10 @@
             "method": "GET",
             "url": "{{base_url}}/orders?page=1&size=10",
             "header": [
-              {"key": "Authorization", "value": "Bearer {{user_token}}"}
+              {
+                "key": "Authorization",
+                "value": "Bearer {{user_token}}"
+              }
             ]
           }
         }
@@ -276,12 +352,18 @@
             "method": "POST",
             "url": "{{base_url}}/ai/consult",
             "header": [
-              {"key": "Content-Type", "value": "application/json"},
-              {"key": "Authorization", "value": "Bearer {{user_token}}"}
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{user_token}}"
+              }
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\"product_id\": \"{{product_id}}\", \"question\": \"这款商品性价比怎么样？适合什么人群购买？\"}"
+              "raw": "{\"product_id\": {{product_id}}, \"question\": \"这款商品性价比怎么样？适合什么人群购买？\"}"
             }
           }
         }

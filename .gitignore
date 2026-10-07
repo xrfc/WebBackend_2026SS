@@ -26,3 +26,9 @@ mysql_data/
 # OS
 .DS_Store
 Thumbs.db
+.pytest_cache/
+.env.tmp-*
+*.sqlite
+*.log
+node_modules/
+tests/ui/screenshots/
