@@ -1,46 +1,193 @@
+name: webbackend
+
+x-environment: &environment
+  SECRET_KEY: ${SECRET_KEY:?Run python scripts/deploy.py first}
+  MYSQL_HOST: mysql
+  MYSQL_USER: webbackend
+  MYSQL_PASSWORD: ${MYSQL_PASSWORD:?Missing MYSQL_PASSWORD}
+  MYSQL_DATABASE: webbackend
+  REDIS_HOST: redis
+  REDIS_PASSWORD: ${REDIS_PASSWORD:?Missing REDIS_PASSWORD}
+  RABBITMQ_HOST: rabbitmq
+  RABBITMQ_USER: webbackend
+  RABBITMQ_PASS: ${RABBITMQ_PASS:?Missing RABBITMQ_PASS}
+  USER_SERVICE_URL: http://user:8001
+  PRODUCT_SERVICE_URL: http://product:8002
+  ORDER_SERVICE_URL: http://order:8003
+  SECKILL_SERVICE_URL: http://seckill:8004
+  AI_SERVICE_URL: http://ai:8005
+  CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:8000,http://127.0.0.1:8000}
+  LLM_API_KEY: ${LLM_API_KEY:-}
+  LLM_BASE_URL: ${LLM_BASE_URL:-https://api.deepseek.com}
+  LLM_MODEL: ${LLM_MODEL:-deepseek-chat}
+  MAX_OUTBOX_LENGTH: ${MAX_OUTBOX_LENGTH:-10000}
+  MQ_MAX_RETRIES: ${MQ_MAX_RETRIES:-3}
+  MQ_RETRY_DELAY_MS: ${MQ_RETRY_DELAY_MS:-5000}
+
+x-app: &app
+  image: webbackend-app:local
+  build:
+    context: .
+    target: runtime
+  restart: unless-stopped
+  init: true
+  environment: *environment
+  depends_on:
+    db-init:
+      condition: service_completed_successfully
+  healthcheck:
+    test: ["CMD", "python", "-c", "import urllib.request, os; urllib.request.urlopen('http://127.0.0.1:' + os.environ['APP_PORT'] + '/ready', timeout=8)"]
+    interval: 10s
+    timeout: 10s
+    retries: 12
+    start_period: 15s
+  logging:
+    driver: json-file
+    options:
+      max-size: 10m
+      max-file: '3'
+
 services:
   mysql:
     image: mysql:8.0
-    container_name: webbackend_mysql
+    restart: unless-stopped
     environment:
-      MYSQL_ROOT_PASSWORD: Six666666.
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?Missing MYSQL_ROOT_PASSWORD}
       MYSQL_DATABASE: webbackend
-    ports:
-      - "3306:3306"
+      MYSQL_USER: webbackend
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:?Missing MYSQL_PASSWORD}
     volumes:
       - mysql_data:/var/lib/mysql
-    command: --default-authentication-plugin=mysql_native_password
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-pSix666666."]
-      interval: 10s
-      timeout: 10s
-      retries: 10
+      test: ["CMD-SHELL", "MYSQL_PWD=\"$$MYSQL_ROOT_PASSWORD\" mysqladmin ping -h localhost --silent"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+    command: ["--character-set-server=utf8mb4", "--collation-server=utf8mb4_unicode_ci"]
 
   redis:
-    image: redis:7-alpine
-    container_name: webbackend_redis
-    ports:
-      - "6379:6379"
+    image: redis:7.2-alpine
+    restart: unless-stopped
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?Missing REDIS_PASSWORD}
+    command: ["sh", "-c", "exec redis-server --appendonly yes --appendfsync always --maxmemory 256mb --maxmemory-policy noeviction --requirepass \"$$REDIS_PASSWORD\""]
+    volumes:
+      - redis_data:/data
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 10s
+      test: ["CMD-SHELL", "REDISCLI_AUTH=\"$$REDIS_PASSWORD\" redis-cli ping | grep -q PONG"]
+      interval: 5s
       timeout: 5s
-      retries: 5
+      retries: 20
 
   rabbitmq:
-    image: rabbitmq:3-management-alpine
-    container_name: webbackend_rabbitmq
-    ports:
-      - "5672:5672"
-      - "15672:15672"
+    image: rabbitmq:3.13-management-alpine
+    restart: unless-stopped
     environment:
-      RABBITMQ_DEFAULT_USER: admin
-      RABBITMQ_DEFAULT_PASS: admin123
+      RABBITMQ_DEFAULT_USER: webbackend
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASS:?Missing RABBITMQ_PASS}
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
     healthcheck:
-      test: ["CMD", "rabbitmq-diagnostics", "ping"]
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
       interval: 10s
-      timeout: 5s
-      retries: 5
+      timeout: 10s
+      retries: 20
+
+  db-init:
+    image: webbackend-app:local
+    build:
+      context: .
+      target: runtime
+    restart: 'no'
+    environment:
+      <<: *environment
+      ADMIN_USERNAME: ${ADMIN_USERNAME:-admin}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:?Missing ADMIN_PASSWORD}
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: ["python", "-m", "scripts.init_db"]
+
+  user:
+    <<: *app
+    environment:
+      <<: *environment
+      APP_PORT: '8001'
+    command: ["python", "-m", "uvicorn", "services.user_service.main:app", "--host", "0.0.0.0", "--port", "8001", "--limit-concurrency", "256", "--no-proxy-headers", "--ws-max-size", "65536"]
+
+  product:
+    <<: *app
+    environment:
+      <<: *environment
+      APP_PORT: '8002'
+    command: ["python", "-m", "uvicorn", "services.product_service.main:app", "--host", "0.0.0.0", "--port", "8002", "--limit-concurrency", "256", "--no-proxy-headers"]
+
+  order:
+    <<: *app
+    environment:
+      <<: *environment
+      APP_PORT: '8003'
+    depends_on:
+      db-init:
+        condition: service_completed_successfully
+      rabbitmq:
+        condition: service_healthy
+    command: ["python", "-m", "uvicorn", "services.order_service.main:app", "--host", "0.0.0.0", "--port", "8003", "--limit-concurrency", "256", "--no-proxy-headers", "--ws-max-size", "65536"]
+
+  seckill:
+    <<: *app
+    environment:
+      <<: *environment
+      APP_PORT: '8004'
+    command: ["python", "-m", "uvicorn", "services.seckill_service.main:app", "--host", "0.0.0.0", "--port", "8004", "--limit-concurrency", "256", "--no-proxy-headers"]
+
+  ai:
+    <<: *app
+    environment:
+      <<: *environment
+      APP_PORT: '8005'
+    command: ["python", "-m", "uvicorn", "services.ai_service.main:app", "--host", "0.0.0.0", "--port", "8005", "--limit-concurrency", "64", "--no-proxy-headers"]
+
+  gateway:
+    <<: *app
+    environment:
+      <<: *environment
+      APP_PORT: '8000'
+    depends_on:
+      user:
+        condition: service_healthy
+      product:
+        condition: service_healthy
+      order:
+        condition: service_healthy
+      seckill:
+        condition: service_healthy
+      ai:
+        condition: service_healthy
+    ports:
+      - '${GATEWAY_BIND:-127.0.0.1}:${GATEWAY_PORT:-8000}:8000'
+    command: ["python", "-m", "uvicorn", "services.gateway.main:app", "--host", "0.0.0.0", "--port", "8000", "--limit-concurrency", "256", "--no-proxy-headers", "--ws-max-size", "65536"]
+
+  tests:
+    profiles: [test]
+    image: webbackend-tests:local
+    build:
+      context: .
+      target: test
+    environment:
+      <<: *environment
+      ADMIN_USERNAME: ${ADMIN_USERNAME:-admin}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:?Missing ADMIN_PASSWORD}
+      RUN_LIVE_TESTS: '1'
+      LIVE_BASE_URL: http://gateway:8000
+    depends_on:
+      gateway:
+        condition: service_healthy
+    command: ["python", "-m", "pytest", "-q", "tests/test_live.py", "tests/test_broker.py"]
 
 volumes:
   mysql_data:
+  redis_data:
+  rabbitmq_data:
