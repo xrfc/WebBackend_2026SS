@@ -27,3 +27,14 @@ def test_compose_has_all_services_persistence_and_only_gateway_port():
         assert services[service]['healthcheck']
     assert '--appendfsync always' in services['redis']['command'][-1]
     assert '--maxmemory-policy noeviction' in services['redis']['command'][-1]
+
+
+def test_pinned_mysql_driver_supports_async_pool_ping():
+    from types import SimpleNamespace
+    from sqlalchemy.ext.asyncio import create_async_engine
+    # Exercise dialect compatibility without requiring a database connection.
+    calls = []
+    connection = SimpleNamespace(ping=lambda reconnect: calls.append(reconnect))
+    mysql = create_async_engine('mysql+aiomysql://localhost/example', pool_pre_ping=True)
+    assert mysql.dialect.do_ping(connection) is True
+    assert calls == [False]
