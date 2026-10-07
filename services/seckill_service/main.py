@@ -5,7 +5,7 @@ import time
 import uuid
 from contextlib import asynccontextmanager
 from uuid import UUID
-from fastapi import Depends, HTTPException, Path
+from fastapi import Depends, HTTPException, Path, Query, Response
 from pydantic import BaseModel, ConfigDict, Field, StrictInt
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
@@ -286,3 +286,21 @@ async def stock(product_id: int = Path(ge=1, le=2147483647)):
 async def ready():
     await check_dependencies()
     return {'status': 'ready', 'mq_connected': relay.connected, 'outbox_length': await redis_client.xlen(OUTBOX)}
+
+
+@app.get('/seckill/observe/overview')
+async def observe_overview(response: Response, limit: int = Query(25, ge=1, le=50), user=Depends(require_role('admin'))):
+    from common.observation import overview
+    await rate_limit('observe:' + user['sub'], 36, 60)
+    data = await overview(limit)
+    data['relay_connected'] = relay.connected
+    response.headers['Cache-Control'] = 'no-store'
+    return ApiResponse.ok(data)
+
+
+@app.get('/seckill/observe/requests/{request_id}')
+async def observe_request(request_id: UUID, response: Response, user=Depends(require_role('admin'))):
+    from common.observation import inspect_request
+    await rate_limit('observe-request:' + user['sub'], 30, 60)
+    response.headers['Cache-Control'] = 'no-store'
+    return ApiResponse.ok(await inspect_request(str(request_id)))

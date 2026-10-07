@@ -1,0 +1,11 @@
+{
+  "name": "webbackend-lab-checks",
+  "private": true,
+  "scripts": {
+    "test:scenarios": "node --test tests/ui/scenarios.test.cjs",
+    "test:ui": "node tests/ui/browser.cjs"
+  },
+  "devDependencies": {
+    "playwright": "1.48.2"
+  }
+}

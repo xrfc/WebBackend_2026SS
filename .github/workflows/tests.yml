@@ -16,6 +16,10 @@ jobs:
           cache: pip
       - run: pip install -r requirements-dev.txt
       - run: python -m pytest -q
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm run test:scenarios
   integration:
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -26,6 +30,20 @@ jobs:
           python-version: '3.12'
       - run: python scripts/deploy.py up
       - run: python scripts/deploy.py test
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - name: Browser visualization and live observation
+        run: npm run test:ui
+      - name: Save visualization screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: visualization-screenshots
+          path: tests/ui/screenshots/
+          if-no-files-found: ignore
       - name: Restore after service restart
         run: |
           docker compose restart order seckill

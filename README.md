@@ -20,6 +20,14 @@ Windows 也可以运行 `start_all.bat`；Linux/macOS 可运行 `sh start_all.sh
 
 入口：<http://localhost:8000/docs>。这里聚合五个后端的实际接口，支持登录、Authorize、创建商品、创建活动、抢购和查订单。只有网关暴露主机端口，中间件和业务服务通过 Compose 网络通信。
 
+可视化入口：**<http://localhost:8000/lab>**，根路径也会跳转到这里。随网关启动，无需 Node、前端构建或外部 CDN。包含：
+
+- **原理演示**：12 个场景，可逐步查看库存、去重记录、Stream、MQ、订单和库存回收；每一步有原因、验证方法、示意 JSON、代码位置与面试追问。演示不会操作实际服务。
+- **真实观测**：管理员登录后只读查看最近活动、实际 Stream 积压、MQ Ready/Unacked/死信、已提交订单，以及按 `request_id` 核查结果。页面可每 5 秒采样；Token 仅存页面内存。
+- **部署与验收**：启动顺序、验收命令、隔离环境故障实验与面试演示路线。
+
+真实观测不是跨存储原子快照，也没有逐请求 MQ 追踪。数据不可读时显示未知，采样失败时标记旧数据，不能用全局队列数量推断某个请求的投递状态。详细使用方法见 [docs/可视化实验室.md](docs/可视化实验室.md)。
+
 ```bash
 python scripts/deploy.py status
 python scripts/deploy.py logs
@@ -103,6 +111,8 @@ python run_and_test.py
 GitHub Actions 包含单元测试、完整 Compose 启动、真实 HTTP/MQ/WebSocket 测试、订单/秒杀服务重启后的验收，以及 RabbitMQ 停止期间受理并恢复落库的两阶段故障实验。测试产生独立测试用户与商品，请在隔离测试环境执行，尤其是死信与停服务实验。
 
 单元测试使用 fakeredis/SQLite；真实测试使用实际容器、HTTP 与 MQ，不再把验收项固定为 True。所有失败都返回非零退出码。真实 Redis Lua 的额外本机用例需要专用测试实例 `redis://127.0.0.1:6397/15`，不得指向业务实例。
+
+可视化场景数据测试：`npm run test:scenarios`（只需 Node）。浏览器验收：`npm ci`、`npx playwright install chromium`、`npm run test:ui`，需要完整测试栈已启动且本机有其 `.env`。CI 自动验证桌面/手机交互、管理员实际采样、请求核查、注销、过期、未知/旧数据提示与不可信商品名，并保存示意场景截图。Node/Playwright 仅用于开发验收，不是启动服务的前置条件。
 
 ## 已有数据升级与边界
 

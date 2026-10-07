@@ -30,3 +30,5 @@ Thumbs.db
 .env.tmp-*
 *.sqlite
 *.log
+node_modules/
+tests/ui/screenshots/

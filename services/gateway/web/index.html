@@ -1,0 +1,417 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="light dark" />
+    <title>秒杀实验室 · WebBackend</title>
+    <link rel="stylesheet" href="/lab/assets/lab.css" />
+    <script defer src="/lab/assets/scenarios.js"></script>
+    <script defer src="/lab/assets/lab.js"></script>
+  </head>
+  <body>
+    <header class="topbar">
+      <a class="brand" href="/lab"
+        ><span class="brand-mark" aria-hidden="true">S</span
+        ><span>WebBackend <small>秒杀实验室</small></span></a
+      >
+      <a class="quiet-link" href="/docs" target="_blank" rel="noopener"
+        >API 文档 ↗</a
+      >
+    </header>
+    <main>
+      <div class="intro">
+        <div>
+          <span class="eyebrow">从受理到订单，看清每一次状态变化</span>
+          <h1>把可靠性，讲清楚。</h1>
+          <p>逐步观察库存、消息和订单；用实际服务验证故障恢复。</p>
+        </div>
+        <span class="version-tag">单机学习项目</span>
+      </div>
+      <nav class="tabs" aria-label="实验室页面">
+        <button
+          type="button"
+          class="tab active"
+          data-tab="demo"
+          aria-controls="panel-demo"
+          aria-pressed="true"
+        >
+          01 原理演示
+        </button>
+        <button
+          type="button"
+          class="tab"
+          data-tab="live"
+          aria-controls="panel-live"
+          aria-pressed="false"
+        >
+          02 真实观测
+        </button>
+        <button
+          type="button"
+          class="tab"
+          data-tab="guide"
+          aria-controls="panel-guide"
+          aria-pressed="false"
+        >
+          03 部署与验收
+        </button>
+      </nav>
+
+      <section id="panel-demo" aria-label="原理演示">
+        <div class="notice">
+          <strong>模拟数据</strong
+          ><span>按仓库逻辑演示，不调用抢购接口，不停止真实服务。</span>
+        </div>
+        <div class="demo-layout">
+          <aside class="sidebar">
+            <label for="scenario-picker">选择一个场景</label>
+            <select id="scenario-picker"></select>
+            <p id="scenario-summary" class="muted"></p>
+            <ol id="step-list" class="step-list" aria-label="场景步骤"></ol>
+          </aside>
+          <div class="demo-main">
+            <div class="step-heading">
+              <div>
+                <span id="step-position" class="eyebrow"></span>
+                <h2 id="step-title"></h2>
+              </div>
+              <span id="request-status" class="status-pill"></span>
+            </div>
+            <div class="step-controls">
+              <button id="step-prev" type="button">← 上一步</button
+              ><button id="step-next" type="button" class="primary">
+                下一步 →</button
+              ><button id="step-reset" type="button" class="text-button">
+                回到开头
+              </button>
+            </div>
+            <div class="request-strip">
+              <span>客户端请求 <b>R1</b></span
+              ><span id="http-state"></span>
+            </div>
+            <div class="pipeline" id="pipeline" aria-label="当前数据状态">
+              <article class="store" data-store="redis">
+                <div class="store-title">
+                  <span class="store-index">1</span>
+                  <h3>Redis · Lua</h3>
+                  <span id="redis-state" class="store-state"></span>
+                </div>
+                <dl class="redis-metrics">
+                  <div>
+                    <dt>活动剩余</dt>
+                    <dd><span id="demo-stock">3</span><small>件</small></dd>
+                  </div>
+                  <div>
+                    <dt>本用户记录</dt>
+                    <dd><span id="demo-users">0</span><small>条</small></dd>
+                  </div>
+                  <div>
+                    <dt>Stream</dt>
+                    <dd><span id="demo-stream">0</span><small>条</small></dd>
+                  </div>
+                </dl>
+                <div
+                  id="stock-marks"
+                  class="inventory-marks"
+                  aria-hidden="true"
+                ></div>
+                <div id="redis-events" class="events"></div>
+                <p class="store-caption">库存与待发送事件在同一脚本中写入</p>
+              </article>
+              <article class="store" data-store="mq">
+                <div class="store-title">
+                  <span class="store-index">2</span>
+                  <h3>RabbitMQ</h3>
+                  <span id="mq-state" class="store-state"></span>
+                </div>
+                <dl>
+                  <div>
+                    <dt>未完成消息</dt>
+                    <dd><span id="demo-mq">0</span><small>条</small></dd>
+                  </div>
+                  <div>
+                    <dt>死信</dt>
+                    <dd><span id="demo-dead">0</span><small>条</small></dd>
+                  </div>
+                </dl>
+                <div id="mq-events" class="events"></div>
+                <p class="store-caption">发布确认后，才移除 Stream 事件</p>
+              </article>
+              <article class="store" data-store="sql">
+                <div class="store-title">
+                  <span class="store-index">3</span>
+                  <h3>MySQL</h3>
+                  <span id="sql-state" class="store-state"></span>
+                </div>
+                <dl>
+                  <div>
+                    <dt>最终订单</dt>
+                    <dd><span id="demo-orders">0</span><small>张</small></dd>
+                  </div>
+                  <div>
+                    <dt>商品可用</dt>
+                    <dd><span id="demo-product">2</span><small>件</small></dd>
+                  </div>
+                </dl>
+                <div id="sql-events" class="events"></div>
+                <p class="store-caption">事务提交后 ACK；唯一约束处理重复</p>
+              </article>
+            </div>
+            <div class="flow-links">
+              <span id="publish-link">Redis → MQ：尚未投递</span
+              ><span id="consume-link">MQ → MySQL：尚未落库</span>
+            </div>
+            <p id="inventory-check" class="balance"></p>
+            <div class="explanation" aria-live="polite">
+              <div>
+                <span class="eyebrow">这一刻发生了什么</span>
+                <p id="step-change"></p>
+              </div>
+              <div>
+                <span class="eyebrow">为什么这样处理</span>
+                <p id="step-why"></p>
+              </div>
+              <div>
+                <span class="eyebrow">怎样验证</span>
+                <p id="step-verify"></p>
+              </div>
+            </div>
+            <details class="snapshot">
+              <summary>查看当前示意数据与代码位置</summary>
+              <div class="code-location" id="step-code"></div>
+              <pre id="demo-json"></pre>
+            </details>
+            <div class="interview">
+              <h3>面试追问</h3>
+              <p id="interview-question"></p>
+              <details>
+                <summary>展开思路</summary>
+                <p id="interview-answer"></p>
+              </details>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section id="panel-live" aria-label="真实观测" hidden>
+        <div class="notice real">
+          <strong>实际数据 · 只读</strong
+          ><span
+            >跨 Redis、MQ、MySQL
+            分别采样，存在时间差；不是单个请求的完整分布式追踪。</span
+          >
+        </div>
+        <div id="login-section" class="login-panel">
+          <div>
+            <h2>连接你的运行环境</h2>
+            <p>
+              使用本机 <code>.env</code> 中的管理员账号。Token
+              仅保存在当前页面内存，刷新页面后重新登录。
+            </p>
+          </div>
+          <form id="admin-login">
+            <label for="admin-name"
+              >管理员用户名<input
+                id="admin-name"
+                autocomplete="username"
+                required
+                maxlength="50"
+                value="admin" /></label
+            ><label for="admin-password"
+              >密码<input
+                id="admin-password"
+                type="password"
+                autocomplete="current-password"
+                required
+                maxlength="72" /></label
+            ><button class="primary" type="submit">登录并观测</button>
+          </form>
+        </div>
+        <div id="live-session" hidden>
+          <div class="live-toolbar">
+            <span id="live-user"></span
+            ><label class="checkbox"
+              ><input id="auto-refresh" type="checkbox" />每 5 秒刷新</label
+            ><button id="refresh-live" type="button">立即刷新</button
+            ><button id="logout-live" type="button">注销</button>
+          </div>
+          <p id="live-freshness" class="muted"></p>
+          <div
+            id="service-health"
+            class="service-health"
+            aria-label="业务服务就绪状态"
+          ></div>
+          <div class="live-grid">
+            <article class="metric-panel">
+              <span class="eyebrow">Redis Stream · outbox</span
+              ><strong id="live-outbox">—</strong>
+              <p id="live-outbox-detail"></p>
+              <span id="live-relay" class="muted"></span>
+            </article>
+            <article class="metric-panel">
+              <span class="eyebrow">RabbitMQ · 队列采样</span>
+              <div id="live-queues"></div>
+              <p class="muted">
+                Ready 等待消费；Unacked 已投递未确认。管理 API
+                统计可能稍有延迟。
+              </p>
+            </article>
+          </div>
+          <div class="section-title">
+            <h2>最近活动</h2>
+            <span class="muted">最多 25 个；按创建时间排序</span>
+          </div>
+          <div id="live-activities" class="activity-grid"></div>
+          <div class="section-title">
+            <h2>按请求 ID 核查</h2>
+            <span class="muted">数据库订单优先作为最终结果</span>
+          </div>
+          <form id="inspect-form" class="inspect-form">
+            <label for="inspect-id" class="sr-only">请求 UUID</label
+            ><input
+              id="inspect-id"
+              placeholder="输入 request_id（UUID）"
+              required
+              maxlength="36"
+            /><button type="submit">核查请求</button>
+          </form>
+          <div
+            id="inspect-result"
+            class="inspect-result"
+            aria-live="polite"
+          ></div>
+          <details>
+            <summary>最近 20 张秒杀订单</summary>
+            <div id="live-orders" class="order-list"></div>
+          </details>
+          <details>
+            <summary>Stream 前 10 条事件预览（不会消费消息）</summary>
+            <pre id="live-stream-preview"></pre>
+          </details>
+        </div>
+        <p id="live-message" role="status" aria-live="polite"></p>
+        <div class="live-howto">
+          <h3>把一次真实抢购看清楚</h3>
+          <ol>
+            <li>
+              在
+              <a href="/docs" target="_blank" rel="noopener">API 文档</a
+              >用管理员创建商品与活动，普通用户提交抢购，保存
+              <code>request_id</code>。
+            </li>
+            <li>
+              回到这里刷新，核对活动初始额度、Redis
+              剩余、订单数量和商品可用库存。
+            </li>
+            <li>
+              按请求 ID 核查 SQL 订单和 Redis 原始记录。MQ
+              中某一条消息的位置未被逐请求追踪，不从总量推断它的状态。
+            </li>
+            <li>
+              仅在隔离测试环境停止 MQ，观察 Stream
+              积压；恢复后观察积压减少与最终订单生成。
+            </li>
+          </ol>
+          <p>
+            页面不会停止服务、创建订单、释放库存或重投死信。通过 API
+            或运维命令进行实际实验。
+          </p>
+        </div>
+      </section>
+
+      <section id="panel-guide" aria-label="部署与验收" hidden>
+        <div class="notice">
+          <strong>实际操作指南</strong
+          ><span
+            >以下是命令与检查点，不会在浏览器中执行，也不会模拟“测试通过”。</span
+          >
+        </div>
+        <div class="guide-grid">
+          <article>
+            <span class="eyebrow">01 环境与配置</span>
+            <h2>准备启动条件</h2>
+            <p>
+              安装 Docker、Compose ≥ 2.20 与 Python
+              3.12+。首次需要下载镜像和依赖。已有数据库升级前先备份。
+            </p>
+            <pre>python scripts/deploy.py check</pre>
+            <p>自动生成随机凭据；再次执行复用 <code>.env</code>。</p>
+          </article>
+          <article>
+            <span class="eyebrow">02 启动与就绪</span>
+            <h2>一条命令启动完整栈</h2>
+            <pre>python scripts/deploy.py</pre>
+            <p>
+              MySQL TCP 可用 → db-init 成功 → 业务服务就绪 →
+              网关。只有网关暴露主机端口。
+            </p>
+            <pre>python scripts/deploy.py status</pre>
+            <p>
+              <code>/health</code
+              >表示进程存活；<code>/ready</code>检查依赖是否就绪。
+            </p>
+          </article>
+          <article>
+            <span class="eyebrow">03 业务验收</span>
+            <h2>验证最终结果</h2>
+            <pre>python scripts/deploy.py test</pre>
+            <p>
+              真实 HTTP、MySQL、Redis、RabbitMQ 和
+              WebSocket。检查订单数量、金额、重复提交、越权和注销。请在隔离测试环境运行。
+            </p>
+            <p>
+              源码：<code>tests/test_live.py</code>、<code>tests/test_broker.py</code>。
+            </p>
+          </article>
+          <article>
+            <span class="eyebrow">04 故障实验</span>
+            <h2>停止 MQ，再恢复</h2>
+            <pre>
+docker compose stop rabbitmq
+docker compose start rabbitmq</pre
+            >
+            <p>
+              停止期间确认请求仍被受理且 Stream 保留；恢复后按请求 ID
+              确认只生成一张订单。MQ 停止时不能用完整 Compose
+              启动命令代替纯观察。
+            </p>
+            <p>
+              自动实验见 <code>tests/test_faults.py</code> 与 GitHub Actions。
+            </p>
+          </article>
+          <article>
+            <span class="eyebrow">05 日志与停止</span>
+            <h2>保留数据再启动</h2>
+            <pre>
+python scripts/deploy.py logs
+python scripts/deploy.py down</pre
+            >
+            <p>
+              <code>down</code
+              >保留数据卷。不要用删除卷的方法“修复”库存和订单异常。
+            </p>
+          </article>
+          <article>
+            <span class="eyebrow">06 面试演示</span>
+            <h2>用证据支撑设计</h2>
+            <ol>
+              <li>演示正常下单与 HTTP 202。</li>
+              <li>展示消息重复时唯一约束如何生效。</li>
+              <li>展示真实 MQ 中断与恢复证据。</li>
+              <li>说明单节点故障、保留期和支付退款边界。</li>
+            </ol>
+            <p>
+              模拟场景说明原理；真实观测和测试记录说明已验证的行为。这里没有真实
+              QPS 指标。
+            </p>
+          </article>
+        </div>
+      </section>
+      <footer>
+        WebBackend · 单机可恢复秒杀实验
+        <span>精确金额 / 确认投递 / 幂等落库</span>
+      </footer>
+    </main>
+  </body>
+</html>

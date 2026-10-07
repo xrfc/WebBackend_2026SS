@@ -92,6 +92,15 @@ async def test_real_end_to_end_stock_orders_and_websocket(api):
     assert duplicate.json()['data']['duplicate'] is True
     stock = (await api.get(f'/seckill/stock/{pid}')).json()['data']
     assert stock['remaining_stock'] == 0
+    observation = await api.get('/seckill/observe/overview', headers=auth(admin))
+    assert observation.status_code == 200, observation.text
+    observed = next(row for row in observation.json()['data']['activities'] if row['id'] == aid)
+    assert observed['redis']['remaining_stock'] == 0 and observed['redis']['accepted_users'] == 5
+    assert observed['orders_created'] == 5 and observed['initial_stock'] == 5
+    request_observation = await api.get('/seckill/observe/requests/' + first.json()['data']['request_id'], headers=auth(admin))
+    assert request_observation.status_code == 200
+    assert request_observation.json()['data']['status'] == 'created'
+    assert (await api.get('/seckill/observe/overview', headers=auth(people[1]['token']))).status_code == 403
     assert (await api.get('/seckill/requests/' + first.json()['data']['request_id'], headers=auth(people[1]['token']))).status_code == 404
     for _ in range(2):
         response = await api.post(f'/seckill/activities/{aid}/close', headers=auth(admin))

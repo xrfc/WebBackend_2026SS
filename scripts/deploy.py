@@ -60,6 +60,7 @@ def main():
     elif options.action == 'up':
         run(base + ['up', '--build', '--detach', '--wait', '--wait-timeout', '240'])
         print('Services ready. Open http://localhost:8000/docs (or your configured GATEWAY_PORT).')
+        print('Visualization lab: http://localhost:8000/lab (principle simulation + read-only admin observations).')
         print('Administrator credentials: ADMIN_USERNAME / ADMIN_PASSWORD in .env. Existing accounts are preserved.')
     elif options.action == 'test':
         run(base + ['--profile', 'test', 'run', '--build', '--rm', 'tests'])

@@ -8,3 +8,5 @@ __pycache__
 *.db
 *.sqlite
 *.log
+node_modules
+tests/ui/screenshots

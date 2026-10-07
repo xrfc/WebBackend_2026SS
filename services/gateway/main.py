@@ -1,17 +1,21 @@
 import asyncio
 import time
 import copy
+from pathlib import Path
 from contextlib import asynccontextmanager
 from urllib.parse import urlsplit
 import httpx
 import websockets
-from fastapi import Request, HTTPException, WebSocket, WebSocketDisconnect
-from fastapi.responses import Response
+from fastapi import Request, HTTPException, WebSocket, WebSocketDisconnect, Depends
+from fastapi.responses import Response, FileResponse, RedirectResponse
+from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from common.app import create_app
 from common.config import settings
 from common.redis_client import redis_client
 from common.limits import rate_limit
+from common.auth import require_role
+from common.response import ApiResponse
 
 ROUTE_MAP = {
     '/register': settings.USER_SERVICE_URL, '/login': settings.USER_SERVICE_URL,
@@ -45,6 +49,41 @@ app.add_middleware(CORSMiddleware,
     allow_origins=[origin.strip() for origin in settings.CORS_ORIGINS.split(',') if origin.strip()],
     allow_credentials=True, allow_methods=['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
     allow_headers=['Authorization', 'Content-Type'])
+
+LAB_ROOT = Path(__file__).resolve().parent / 'web'
+
+
+@app.get('/', include_in_schema=False)
+async def home():
+    return RedirectResponse('/lab')
+
+
+@app.get('/lab', include_in_schema=False)
+@app.get('/lab/', include_in_schema=False)
+async def lab_page():
+    return FileResponse(LAB_ROOT / 'index.html', headers={
+        'Content-Security-Policy': "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
+        'X-Content-Type-Options': 'nosniff', 'Referrer-Policy': 'no-referrer'})
+
+
+@app.get('/lab/api/health', include_in_schema=False)
+async def lab_health(response: Response, user=Depends(require_role('admin'))):
+    await rate_limit('lab-health:' + user['sub'], 36, 60)
+    response.headers['Cache-Control'] = 'no-store'
+    names = {'user': settings.USER_SERVICE_URL, 'product': settings.PRODUCT_SERVICE_URL,
+        'order': settings.ORDER_SERVICE_URL, 'seckill': settings.SECKILL_SERVICE_URL, 'ai': settings.AI_SERVICE_URL}
+    async def check(name, url):
+        start = time.monotonic()
+        try:
+            response = await app.state.http.get(url + '/ready', timeout=3)
+            ready_state = response.status_code == 200
+        except httpx.HTTPError:
+            ready_state = False
+        return {'name': name, 'ready': ready_state, 'duration_ms': round((time.monotonic() - start) * 1000)}
+    return ApiResponse.ok({'services': await asyncio.gather(*[check(name, url) for name, url in names.items()])})
+
+
+app.mount('/lab/assets', StaticFiles(directory=LAB_ROOT / 'assets'), name='lab-assets')
 
 
 @app.get('/ready')

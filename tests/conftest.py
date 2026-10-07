@@ -20,7 +20,7 @@ async def isolated_state(monkeypatch):
     if LIVE:
         yield None
         return
-    from common import auth, redis_client, seckill_store, limits, lifecycle
+    from common import auth, redis_client, seckill_store, limits, lifecycle, observation
     from services.user_service import main as user
     from services.product_service import main as product
     from services.order_service import main as order
@@ -28,7 +28,7 @@ async def isolated_state(monkeypatch):
     from services.ai_service import main as ai
     from services.gateway import main as gateway
     fake = fakeredis.aioredis.FakeRedis(decode_responses=True)
-    for module in (auth, redis_client, seckill_store, limits, lifecycle, user, product, order, seckill, ai, gateway):
+    for module in (auth, redis_client, seckill_store, limits, lifecycle, observation, user, product, order, seckill, ai, gateway):
         if hasattr(module, 'redis_client'):
             monkeypatch.setattr(module, 'redis_client', fake)
     async with engine.begin() as connection:
