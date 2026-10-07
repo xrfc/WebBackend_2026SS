@@ -13,6 +13,7 @@ from common.models import SeckillActivity, Product, Order
 from common.mq import ORDER_QUEUE, RETRY_QUEUE, DEAD_QUEUE
 from common.redis_client import redis_client
 from common.seckill_store import OUTBOX, OUTBOX_GROUP, activity_key, users_key, request_key
+from common.order_lookup import fetch_order_by_request
 
 
 def timestamp():
@@ -114,8 +115,7 @@ async def overview(limit=25):
 
 
 async def inspect_request(request_id):
-    async with async_session_factory() as db:
-        order = (await db.execute(select(Order).where(Order.request_id == request_id))).scalar_one_or_none()
+    order = await fetch_order_by_request(request_id)
     record = None
     reason = None
     try:
@@ -129,6 +129,8 @@ async def inspect_request(request_id):
         reason = 'unavailable_or_invalid'
     if not order and not record:
         raise HTTPException(503 if reason else 404, '记录不可用，需核查' if reason else '请求不存在或 Redis 记录已过保留期')
+    if not order and record['state'] == 'created':
+        order = await fetch_order_by_request(request_id)
     status = 'created' if order else ('inconsistent' if record['state'] == 'created' else record['state'])
     return {'sampled_at': timestamp(), 'request_id': request_id,
         'status': status, 'order': order_view(order) if order else None,

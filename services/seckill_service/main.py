@@ -15,12 +15,13 @@ from common.auth import get_current_user, require_role
 from common.config import settings
 from common.database import async_session_factory, engine, init_db
 from common.lifecycle import check_dependencies
-from common.models import Product, ProductStatus, SeckillActivity, Order
+from common.models import Product, ProductStatus, SeckillActivity
 from common.redis_client import redis_client
 from common.response import ApiResponse
 from common.validation import ID, Money
 from common.limits import rate_limit
 from common.mq import connect_mq, persistent_message
+from common.order_lookup import fetch_order_by_request
 from common.seckill_store import (
     OUTBOX, OUTBOX_GROUP, activity_key, active_key, initialize_activity, activate_activity,
     reserve, read_request, FREEZE_LUA,
@@ -224,16 +225,24 @@ async def close(activity_id: UUID, user=Depends(require_role('admin'))):
 
 
 async def request_result(request_id, user_id):
-    async with async_session_factory() as db:
-        order = (await db.execute(select(Order).where(Order.request_id == request_id))).scalar_one_or_none()
-        if order:
-            if order.user_id != user_id:
-                raise HTTPException(404, '抢购记录不存在')
-            return {'request_id': request_id, 'status': 'created', 'order_id': order.id,
-                'activity_id': order.activity_id, 'product_id': order.product_id}
+    def completed(order):
+        if order.user_id != user_id:
+            raise HTTPException(404, '抢购记录不存在')
+        return {'request_id': request_id, 'status': 'created', 'order_id': order.id,
+            'activity_id': order.activity_id, 'product_id': order.product_id}
+    order = await fetch_order_by_request(request_id)
+    if order:
+        return completed(order)
     record = await read_request(request_id)
     if not record or record['user_id'] != user_id:
         raise HTTPException(404, '抢购记录不存在或已过保留期')
+    if record['state'] == 'created':
+        # The consumer may commit between the first SQL read and the Redis read.
+        # A fresh transaction sees that commit under MySQL REPEATABLE READ.
+        order = await fetch_order_by_request(request_id)
+        if order:
+            return completed(order)
+        raise HTTPException(503, '订单状态不一致，需核查；请勿重复回收库存')
     return {'request_id': request_id, 'status': record['state'], 'activity_id': record['activity_id'],
         'product_id': record['product_id'], 'order_id': None}
 

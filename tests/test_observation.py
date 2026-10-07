@@ -82,6 +82,39 @@ async def test_redis_created_without_sql_order_is_inconsistent(tokens, isolated_
     await isolated_state.hset(request_key(rid), 'state', 'created')
     data = await observation.inspect_request(rid)
     assert data['status'] == 'inconsistent' and data['order'] is None
+    async with client(seckill.app) as api:
+        response = await api.get('/seckill/requests/' + rid, headers=headers(tokens['customer']))
+    assert response.status_code == 503
+
+
+async def committed_fixture(tokens, isolated_state):
+    from common.seckill_store import request_key
+    from common.order_lookup import fetch_order_by_request
+    _, aid = await activity(tokens)
+    rid = str(uuid.uuid4())
+    await reserve(aid, 2, rid)
+    event = OrderEvent.model_validate({k:v for k,v in (await read_request(rid)).items() if k != 'state'})
+    await order.create_order(event)
+    await isolated_state.hset(request_key(rid), 'state', 'created')
+    return rid, await fetch_order_by_request(rid)
+
+
+async def test_business_result_rechecks_commit_between_sql_and_redis(tokens, isolated_state, monkeypatch):
+    rid, committed = await committed_fixture(tokens, isolated_state)
+    lookup = AsyncMock(side_effect=[None, committed])
+    monkeypatch.setattr(seckill, 'fetch_order_by_request', lookup)
+    result = await seckill.request_result(rid, 2)
+    assert result['status'] == 'created' and result['order_id'] == committed.id
+    assert lookup.await_count == 2
+
+
+async def test_observer_does_not_flag_a_concurrent_commit_as_corruption(tokens, isolated_state, monkeypatch):
+    rid, committed = await committed_fixture(tokens, isolated_state)
+    lookup = AsyncMock(side_effect=[None, committed])
+    monkeypatch.setattr(observation, 'fetch_order_by_request', lookup)
+    result = await observation.inspect_request(rid)
+    assert result['status'] == 'created' and result['order']['id'] == committed.id
+    assert lookup.await_count == 2
 
 
 async def test_wrong_key_types_do_not_claim_healthy_zero(tokens, isolated_state, monkeypatch):
