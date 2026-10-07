@@ -94,6 +94,8 @@ async def test_real_end_to_end_stock_orders_and_websocket(api):
     assert stock['remaining_stock'] == 0
     observation = await api.get('/seckill/observe/overview', headers=auth(admin))
     assert observation.status_code == 200, observation.text
+    queues = observation.json()['data']['queues']
+    assert len(queues) == 3 and all(row['available'] for row in queues), queues
     observed = next(row for row in observation.json()['data']['activities'] if row['id'] == aid)
     assert observed['redis']['remaining_stock'] == 0 and observed['redis']['accepted_users'] == 5
     assert observed['orders_created'] == 5 and observed['initial_stock'] == 5

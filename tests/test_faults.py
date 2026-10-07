@@ -19,6 +19,11 @@ async def test_broker_outage_retains_and_recovers_accepted_work(api):
         result = (await api.get('/seckill/requests/' + rid, headers=auth(person['token']))).json()['data']
         assert result['status'] == 'queued'
         assert (await api.get('/orders', headers=auth(person['token']))).json()['data']['total'] == 0
+        observation = await api.get('/seckill/observe/overview', headers=auth(admin))
+        assert observation.status_code == 200, observation.text
+        sampled = observation.json()['data']
+        assert sampled['outbox']['available'] and sampled['outbox']['length'] >= 1
+        assert all(not row['available'] and 'total' not in row for row in sampled['queues'])
         await redis_client.set('tests:broker-outage', json.dumps({'token': person['token'], 'request_id': rid}), ex=600)
     elif stage == 'recovery':
         stored = await redis_client.get('tests:broker-outage')
