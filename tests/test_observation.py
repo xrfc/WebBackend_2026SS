@@ -74,6 +74,16 @@ async def test_request_uses_sql_after_redis_record_is_lost(tokens, isolated_stat
     assert data['redis_record'] is None
 
 
+async def test_redis_created_without_sql_order_is_inconsistent(tokens, isolated_state):
+    from common.seckill_store import request_key
+    _, aid = await activity(tokens)
+    rid = str(uuid.uuid4())
+    await reserve(aid, 2, rid)
+    await isolated_state.hset(request_key(rid), 'state', 'created')
+    data = await observation.inspect_request(rid)
+    assert data['status'] == 'inconsistent' and data['order'] is None
+
+
 async def test_wrong_key_types_do_not_claim_healthy_zero(tokens, isolated_state, monkeypatch):
     monkeypatch.setattr(observation, 'queue_observations', AsyncMock(return_value=[]))
     _, aid = await activity(tokens)

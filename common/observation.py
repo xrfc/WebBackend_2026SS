@@ -129,7 +129,8 @@ async def inspect_request(request_id):
         reason = 'unavailable_or_invalid'
     if not order and not record:
         raise HTTPException(503 if reason else 404, '记录不可用，需核查' if reason else '请求不存在或 Redis 记录已过保留期')
+    status = 'created' if order else ('inconsistent' if record['state'] == 'created' else record['state'])
     return {'sampled_at': timestamp(), 'request_id': request_id,
-        'status': 'created' if order else record['state'], 'order': order_view(order) if order else None,
+        'status': status, 'order': order_view(order) if order else None,
         'redis_record': record, 'redis_reason': reason,
         'broker_location': 'not_tracked', 'accepted_evidence': bool(record or order)}

@@ -6,6 +6,7 @@
     queued: "queued · 等待订单",
     created: "created · 订单已提交",
     manual_review: "manual_review · 待核查",
+    inconsistent: "数据不一致 · 需核查",
   };
   let scenario = scenes[0],
     position = 0,
@@ -523,7 +524,9 @@
           "p",
           data.order
             ? "最终订单已提交，以 SQL 为准。"
-            : "尚无最终订单。queued / manual_review 不是退款或库存释放依据。",
+            : data.status === "inconsistent"
+              ? "Redis 标记 created，但 SQL 没有对应订单。需人工核查，不能宣称订单成功或自动退库存。"
+              : "尚无最终订单。queued / manual_review 不是退款或库存释放依据。",
         ),
       );
       const details = node("details");
