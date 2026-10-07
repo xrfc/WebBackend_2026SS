@@ -14,6 +14,15 @@ if (fs.existsSync(".env"))
 const base = env.LAB_BASE_URL || "http://127.0.0.1:8000";
 const output = path.resolve("tests/ui/screenshots");
 fs.mkdirSync(output, { recursive: true });
+async function waitText(page, selector, expected, timeout = 10000) {
+  // Poll through locator utilities; waitForFunction uses eval blocked by the page CSP.
+  const deadline = Date.now() + timeout;
+  while (Date.now() < deadline) {
+    if ((await page.locator(selector).textContent()).includes(expected)) return;
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+  throw new Error("Timed out waiting for " + selector + " to show " + expected);
+}
 async function run() {
   const browser = await chromium.launch({ headless: true });
   try {
@@ -84,33 +93,19 @@ async function run() {
     await page.fill("#admin-name", env.ADMIN_USERNAME || "admin");
     await page.fill("#admin-password", env.ADMIN_PASSWORD);
     await page.click("#admin-login button");
-    await page.waitForFunction(
-      () =>
-        document.querySelector("#live-message").textContent === "采样完成。",
-      null,
-      { timeout: 20000 },
-    );
+    await waitText(page, "#live-message", "采样完成。", 20000);
     assert.equal(await page.locator("#service-health .health-chip").count(), 5);
     assert.ok((await page.locator("#live-activities .activity").count()) > 0);
     await page.locator("details:has(#live-orders) > summary").click();
     await page.locator("#live-orders button").first().click();
-    await page.waitForFunction(
-      () =>
-        document
-          .querySelector("#inspect-result")
-          .textContent.includes("created"),
-      null,
-      { timeout: 10000 },
-    );
+    await waitText(page, "#inspect-result", "created");
     assert.ok(
       (await page.textContent("#inspect-result")).includes(
         "MQ 逐请求位置：未跟踪",
       ),
     );
     await page.click("#logout-live");
-    await page.waitForFunction(() =>
-      document.querySelector("#live-message").textContent.startsWith("已注销"),
-    );
+    await waitText(page, "#live-message", "已注销");
     assert.ok(await page.isVisible("#login-section"));
     // Fault samples are explicitly mocked; the preceding check used the actual stack.
     const hostile = '<img src=x onerror="window.attacked=true">';
@@ -170,10 +165,7 @@ async function run() {
     );
     await page.fill("#admin-password", "mock-password");
     await page.click("#admin-login button");
-    await page.waitForFunction(
-      () =>
-        document.querySelector("#live-message").textContent === "采样完成。",
-    );
+    await waitText(page, "#live-message", "采样完成。");
     assert.equal(await page.textContent("#live-outbox"), "不可用");
     assert.equal(await page.locator("#live-activities img").count(), 0);
     assert.equal(
@@ -185,14 +177,10 @@ async function run() {
     );
     phase = "stale";
     await page.click("#refresh-live");
-    await page.waitForFunction(() =>
-      document.querySelector("#live-freshness").textContent.includes("旧数据"),
-    );
+    await waitText(page, "#live-freshness", "旧数据");
     phase = "expired";
     await page.click("#refresh-live");
-    await page.waitForFunction(() =>
-      document.querySelector("#live-message").textContent.includes("会话失效"),
-    );
+    await waitText(page, "#live-message", "会话失效");
     assert.ok(await page.isVisible("#login-section"));
     assert.equal(await page.locator("#live-activities .activity").count(), 0);
     assert.equal(
